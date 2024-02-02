@@ -61,6 +61,7 @@ class ScanerParser:
                 serial_number = serial_numbers[0]
                 if serial_number not in added_serial_numbers:
                     added_serial_numbers.add(serial_number)
+                    print(f"До записи в excel: {serial_number}")
                     for date_range in date_ranges:
                         if self.check_and_add_year(serial_number, date_range[0].year, added_years_dict):
                             data_list.append({
@@ -101,6 +102,7 @@ class ScanerParser:
                 for serial_number in serial_numbers:
                     if serial_number not in added_serial_numbers:
                         added_serial_numbers.add(serial_number)
+                        print(f"До записи в excel: {serial_number}")
                         for date_range in date_ranges:
                             if self.check_and_add_year(serial_number, date_range[0].year, added_years_dict):
                                 data_list.append({
@@ -208,16 +210,14 @@ class ScanerParser:
         return date_range
     
     def parse_name(self, soup):
-        name_org = soup.title
-        name_org = re.search("для .*? -", name_org.text).group()
+        title_text = soup.title.text
+        match = re.search("для .*? -", title_text)
 
-        for j in range(1, 3):
-            name_org = name_org[:-1]
-            name_org = name_org[1:]
-        name_org = name_org[1:]
-        name_org = name_org[1:]
+        if match:
+            name_org = match.group()[4:-1]
+            return name_org
 
-        return name_org
+        return None
 
     def parse_ip(self, soup):
         ip_mass = soup.find('div', class_="cf_43").find('div', class_='value').getText()
@@ -237,7 +237,7 @@ class ScanerParser:
     
     def parse_serial_number(self, soup):
         serial_number = soup.find('div', class_='cf_51').find('div', class_='value').getText()
-        #регулярное выражение совмещающее патерн серийников
+        # регулярное выражение совмещающее патерн серийников
         pattern = re.compile(r'(.*?-(\d+)-.*?-(\d+))|(0060601\.22\.(\d+)-0060601\.22\.(\d+)|(0060601\.21\.(\d+)-0060601\.21\.(\d+)))')
         match = pattern.search(serial_number)
 
@@ -258,7 +258,7 @@ class ScanerParser:
             parts = serial_number.split('-')
             if len(parts) == 2 and all(part.isdigit() for part in parts):
                 start_value, end_value = map(int, parts)
-                result_list.extend([f"{number:09d}" for number in range(start_value, end_value + 1)])
+                result_list.extend([f"{int(number):09d}" for number in range(start_value, end_value + 1)])
             else:
                 return [serial_number]
 
@@ -279,7 +279,7 @@ class ScanerParser:
 
     def update_excel(self, data_list):
         try:
-            df = pd.read_excel(self.excel_filename)
+            df = pd.read_excel(self.excel_filename,dtype={'S/N': str,'Серийник дубль':str},)
         except FileNotFoundError:
             df = pd.DataFrame()
 
@@ -300,5 +300,16 @@ class ScanerParser:
                     df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
             else:
                 df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+        writer = pd.ExcelWriter(self.excel_filename, engine='xlsxwriter') 
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        
+        text_format = writer.book.add_format({'num_format': '@'})
 
-        df.to_excel(self.excel_filename, index=False)
+        worksheet = writer.sheets['Sheet1']
+        for idx, col in enumerate(df):
+            series = df[col]
+            max_len = max((series.astype(str).map(len).max(), len(str(col)))) + 2
+            worksheet.set_column(idx, idx, max_len,text_format)
+
+        writer.close()
+        # df.to_excel(self.excel_filename, index=False)
