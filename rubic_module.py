@@ -47,11 +47,42 @@ class RubiScraper:
             name_org_front = self.parse_name_second(soup)
             serial_number = self.parse_serial_number(soup)
             ispolnenie = self.parse_ispolnenie(soup)
-            ispolnenie2 = f"{name_org_front} {ispolnenie}"
+            version_rubic = f"{name_org_front} {ispolnenie}"
             data_start = self.parse_date_start(soup)
             data_end = self.parse_date_end(soup)
-            data_list.append([data_start,data_end])
+            data_year_start = self.parse_year_date_start(soup)
+            data_year_end = self.parse_year_date_end(soup)
 
+            added_serial_numbers =set()
+
+            if len(serial_number) == 1:
+                serial_number = serial_number[0]
+                if serial_number not in added_serial_numbers:
+                    added_serial_numbers.add(serial_number)
+                    data_list.append({
+                        'S/N':serial_number,
+                        'Заказчик':name_org,
+                        'Версия':version_rubic,
+                        'Дата 1':data_start,
+                        'Дата 2':data_end,
+                        'Дата 3':data_year_start,
+                        'Дата 4':data_year_end,
+                        'Дата производства': current_date
+                    })
+            else:
+                for serial_number in serial_number:
+                    if serial_number not in added_serial_numbers:
+                        added_serial_numbers.add(serial_number)
+                        data_list.append({
+                            'S/N':serial_number,
+                            'Заказчик':name_org,
+                            'Версия':version_rubic,
+                            'Дата 1':data_start,
+                            'Дата 2':data_end,
+                            'Дата 3':data_year_start,
+                            'Дата 4':data_year_end,
+                            'Дата производства': current_date
+                        })
         return data_list
     
     def parse_name(self, soup):
@@ -158,29 +189,21 @@ class RubiScraper:
         formatted_date = date_end.strftime("%d %B").replace(date_end.strftime("%B"), month_name)
         return formatted_date.capitalize()
     
-if __name__ == "__main__":
-    chromedriver_path = "chromedriver.exe"  
-    username = "a.atochkin"
-    password = "Ha0Pyb2Xow2"
-    excel_filename = "Тест2 рубик.xlsx"
+    def parse_year_date_start(self,soup):
+        data_year_start = soup.find('div', class_='cf_46').find('div', class_='value').getText()
+        data_year_start = datetime.strptime(data_year_start, "%d.%m.%Y")
+        
+        return data_year_start.year
+
+    def parse_year_date_end(self,soup):
+        data_year_end = soup.find('div', class_='cf_49').find('div', class_='value').getText()
+        data_year_end = datetime.strptime(data_year_end, "%d.%m.%Y")
+
+        return data_year_end.year
     
-    
-    scraper = RubiScraper(chromedriver_path, username, password, excel_filename)
-
-    scraper.login()
-
-    urls_to_scrape = ['https://tasks.etecs.ru/issues/20741','https://tasks.etecs.ru/issues/20537', 'https://tasks.etecs.ru/issues/20740']
-
-    data_list = scraper.scrape_data(urls_to_scrape)
-
-    print("ДАнные:")
-    for data in data_list:
-        print(data)
-
-
-    '''def update_excel(self, data_list):
+    def update_excel(self, data_list):
             try:
-                df = pd.read_excel(self.excel_filename,dtype={'S/N': str,'Серийник дубль':str},)
+                df = pd.read_excel(self.excel_filename,dtype={'S/N': str},)
             except FileNotFoundError:
                 df = pd.DataFrame()
 
@@ -189,12 +212,12 @@ if __name__ == "__main__":
 
                 if if_not_empty_df:
                     if_have_double = df.apply(lambda row: 
-                        row['Наименование организации'] == new_data['Наименование организации'] and 
+                        row['Заказчик'] == new_data['Заказчик'] and 
                         any(sn in row['S/N'] if isinstance(row['S/N'], list) else row['S/N'] == sn for sn in new_data['S/N']),
                         axis=1)
 
                     if if_have_double.any():
-                        new_rows = pd.DataFrame([{'Наименование организации': new_data['Наименование организации'],
+                        new_rows = pd.DataFrame([{'Заказчик': new_data['Заказчик'],
                                                 'S/N': sn} for sn in new_data['S/N']])
                         df = pd.concat([df, new_rows], ignore_index=True)
                     else:
@@ -202,14 +225,15 @@ if __name__ == "__main__":
                 else:
                     df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
             writer = pd.ExcelWriter(self.excel_filename, engine='xlsxwriter') 
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
+            df.to_excel(writer, index=False, sheet_name='Рубикон')
             
             text_format = writer.book.add_format({'num_format': '@'})
 
-            worksheet = writer.sheets['Sheet1']
+            worksheet = writer.sheets['Рубикон']
             for idx, col in enumerate(df):
                 series = df[col]
                 max_len = max((series.astype(str).map(len).max(), len(str(col)))) + 2
                 worksheet.set_column(idx, idx, max_len,text_format)
 
-            writer.close()'''
+            writer.close()
+            
